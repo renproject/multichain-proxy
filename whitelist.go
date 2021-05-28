@@ -17,7 +17,14 @@ import (
 type WhitelistOptions struct {
 	Logger *zap.Logger `json:"-,omitempty"`
 
-	URL      string          `json:"url"`
+	URL1     string          `json:"url1"`
+	URL2     string          `json:"url2"`
+
+	AuthTokenProxy string `json:"authTokenProxy"`
+
+	AuthToken1 string `json:"authToken1"`
+	AuthToken2 string `json:"authToken2"`
+
 	User     string          `json:"user"`
 	Password string          `json:"password"`
 	Methods  map[string]bool `json:"methods"`
@@ -115,6 +122,14 @@ func (p *Whitelist) Run(ctx context.Context) {
 func (p *Whitelist) do(job WhitelistJob) {
 	defer close(job.done)
 
+	// check if the auth header has been set correctly
+	if job.req.Header.Get("Authorization") != p.opts.AuthTokenProxy {
+		if err := WriteError(job.rw, -1, fmt.Errorf("request not authorized")); err != nil {
+			p.opts.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+
 	// Restrict the maximum request body size. There should be no reason to
 	// allow requests of unbounded size.
 	sizeLimitedBody := http.MaxBytesReader(job.rw, job.req.Body, p.opts.MaxReqSize)
@@ -150,27 +165,57 @@ func (p *Whitelist) do(job WhitelistJob) {
 		return
 	}
 
-	req, err := http.NewRequest("POST", p.opts.URL, bytes.NewBuffer(raw))
+	res1, resBody1, err := p.processRequest(p.opts.URL1, p.opts.AuthToken1, raw)
 	if err != nil {
-		p.opts.Logger.Error("error building http request", zap.Error(err))
-		if err := WriteError(job.rw, jrpcReq.ID, fmt.Errorf("bad proxy request")); err != nil {
-			p.opts.Logger.Error("error writing response", zap.Error(err))
+		p.opts.Logger.Error("processing request", zap.Error(err), zap.String("url", p.opts.URL1))
+
+		res2, resBody2, err := p.processRequest(p.opts.URL2, p.opts.AuthToken2, raw)
+		if err != nil {
+			p.opts.Logger.Error("processing request", zap.Error(err), zap.String("url", p.opts.URL2))
+			if err := WriteError(job.rw, jrpcReq.ID, fmt.Errorf("bad proxy request")); err != nil {
+				p.opts.Logger.Error("writing response", zap.Error(err))
+			}
+
+			return
 		}
+
+		defer res2.Body.Close()
+		CopyResponse(job.rw, res2, resBody2)
+
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	if p.opts.User != "" || p.opts.Password != "" {
-		req.SetBasicAuth(p.opts.User, p.opts.Password)
+
+	defer res1.Body.Close()
+	CopyResponse(job.rw, res1, resBody1)
+}
+
+func (p *Whitelist) processRequest(url, authToken string, raw []byte) (*http.Response, []byte, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(raw))
+	if err != nil {
+		return nil, nil, fmt.Errorf("building http request: %v", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Del("Authorization")
+	req.Header.Add("Authorization", authToken)
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		p.opts.Logger.Error("error sending http request", zap.Error(err))
-		if err := WriteError(job.rw, jrpcReq.ID, fmt.Errorf("bad proxy response")); err != nil {
-			p.opts.Logger.Error("error writing response", zap.Error(err))
-		}
-		return
+		return nil, nil, fmt.Errorf("sending http request: %v", err)
 	}
-	defer res.Body.Close()
-	CopyResponse(job.rw, res)
+
+	bodyBytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reading response body: %v", err)
+  }
+
+	jrpcRes := JSONRPCResponse{}
+	if err := json.Unmarshal(bodyBytes, &jrpcRes); err != nil {
+		return nil, nil, fmt.Errorf("unmarshaling response body: %v", err)
+	}
+
+	if jrpcRes.Error != nil {
+		return nil, nil, fmt.Errorf("jsonrpc response error: %v", jrpcRes.Error)
+	}
+
+	return res, bodyBytes, nil
 }

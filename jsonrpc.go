@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,10 +14,15 @@ type JSONRPCRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
-func CopyResponse(dst http.ResponseWriter, res *http.Response) {
+type JSONRPCResponse struct {
+	Result interface{} `json:"result"`
+	Error  interface{} `json:"error"`
+}
+
+func CopyResponse(dst http.ResponseWriter, res *http.Response, body []byte) {
 	CopyHeader(dst.Header(), res.Header)
 	dst.WriteHeader(res.StatusCode)
-	io.Copy(dst, res.Body)
+	io.Copy(dst, bytes.NewReader(body))
 }
 
 func CopyHeader(dst, src http.Header) {

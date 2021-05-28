@@ -13,7 +13,11 @@ import (
 )
 
 func main() {
-	proxyURL := os.Getenv("PROXY_URL")
+	proxyURL1 := os.Getenv("PROXY_URL1")
+	proxyURL2 := os.Getenv("PROXY_URL2")
+	authTokenProxy := os.Getenv("AUTH_TOKEN_PROXY")
+	authToken1 := os.Getenv("AUTH_TOKEN1")
+	authToken2 := os.Getenv("AUTH_TOKEN2")
 	proxyUser := os.Getenv("PROXY_USER")
 	proxyPassword := os.Getenv("PROXY_PASSWORD")
 	proxyMethods := strings.Split(os.Getenv("PROXY_METHODS"), ",")
@@ -34,7 +38,11 @@ func main() {
 		MaxReqSize: 16 * 1024,
 		NumWorkers: 10,
 
-		URL:      proxyURL,
+		URL1:     proxyURL1,
+		URL2:     proxyURL2,
+		AuthTokenProxy: authTokenProxy,
+		AuthToken1: authToken1,
+		AuthToken2: authToken2,
 		User:     proxyUser,
 		Password: proxyPassword,
 		Methods:  proxyMethodsMap,
