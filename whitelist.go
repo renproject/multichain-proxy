@@ -161,7 +161,7 @@ func (p *Whitelist) do(job WhitelistJob) {
 	res1, resBody1, err := p.processRequest(p.opts.URL, p.opts.AuthToken, raw)
 	if err != nil {
 		p.opts.Logger.Error("processing request", zap.Error(err), zap.String("url", p.opts.URL))
-		if err = WriteError(job.rw, jrpcReq.ID, fmt.Errorf("bad proxy request")); err != nil {
+		if err = WriteError(job.rw, jrpcReq.ID, err); err != nil {
 			p.opts.Logger.Error("writing response", zap.Error(err))
 		}
 		return
