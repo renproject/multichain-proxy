@@ -15,24 +15,17 @@ import (
 )
 
 type WhitelistOptions struct {
-	Logger *zap.Logger `json:"-,omitempty"`
-
-	URL1     string          `json:"url1"`
-	URL2     string          `json:"url2"`
-
-	AuthTokenProxy string `json:"authTokenProxy"`
-
-	AuthToken1 string `json:"authToken1"`
-	AuthToken2 string `json:"authToken2"`
-
-	User     string          `json:"user"`
-	Password string          `json:"password"`
-	Methods  map[string]bool `json:"methods"`
-
-	Host       string `json:"host"`
-	Port       uint16 `json:"port"`
-	MaxReqSize int64  `json:"maxReqSize"`
-	NumWorkers int    `json:"numWorkers"`
+	Logger         *zap.Logger     `json:"-,omitempty"`
+	URL            string          `json:"url"`
+	AuthTokenProxy string          `json:"authTokenProxy"`
+	AuthToken      string          `json:"authToken"`
+	User           string          `json:"user"`
+	Password       string          `json:"password"`
+	Methods        map[string]bool `json:"methods"`
+	Host           string          `json:"host"`
+	Port           uint16          `json:"port"`
+	MaxReqSize     int64           `json:"maxReqSize"`
+	NumWorkers     int             `json:"numWorkers"`
 }
 
 type WhitelistJob struct {
@@ -165,23 +158,12 @@ func (p *Whitelist) do(job WhitelistJob) {
 		return
 	}
 
-	res1, resBody1, err := p.processRequest(p.opts.URL1, p.opts.AuthToken1, raw)
+	res1, resBody1, err := p.processRequest(p.opts.URL, p.opts.AuthToken, raw)
 	if err != nil {
-		p.opts.Logger.Error("processing request", zap.Error(err), zap.String("url", p.opts.URL1))
-
-		res2, resBody2, err := p.processRequest(p.opts.URL2, p.opts.AuthToken2, raw)
-		if err != nil {
-			p.opts.Logger.Error("processing request", zap.Error(err), zap.String("url", p.opts.URL2))
-			if err := WriteError(job.rw, jrpcReq.ID, fmt.Errorf("bad proxy request")); err != nil {
-				p.opts.Logger.Error("writing response", zap.Error(err))
-			}
-
-			return
+		p.opts.Logger.Error("processing request", zap.Error(err), zap.String("url", p.opts.URL))
+		if err = WriteError(job.rw, jrpcReq.ID, fmt.Errorf("bad proxy request")); err != nil {
+			p.opts.Logger.Error("writing response", zap.Error(err))
 		}
-
-		defer res2.Body.Close()
-		CopyResponse(job.rw, res2, resBody2)
-
 		return
 	}
 
@@ -206,7 +188,7 @@ func (p *Whitelist) processRequest(url, authToken string, raw []byte) (*http.Res
 	bodyBytes, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reading response body: %v", err)
-  }
+	}
 
 	jrpcRes := JSONRPCResponse{}
 	if err := json.Unmarshal(bodyBytes, &jrpcRes); err != nil {
