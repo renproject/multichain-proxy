@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/renproject/multichain-proxy/pkg/authorization"
 	"github.com/renproject/multichain-proxy/pkg/proxy"
 	"github.com/rs/cors"
 	"go.uber.org/zap"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -42,9 +44,11 @@ func main() {
 	proxyServer1 := &httputil.ReverseProxy{
 		Director:       conf1.ProxyDirector,
 		ModifyResponse: conf1.ModifyResponse,
-		ErrorHandler: func(writer http.ResponseWriter, request *http.Request, err error) {
+		ErrorHandler: func(writer http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("node1 failed to respond", zap.Error(err))
-			proxyServer2.ServeHTTP(writer, request)
+			buf := bytes.NewBuffer(conf1.Body)
+			r.Body = ioutil.NopCloser(buf)
+			proxyServer2.ServeHTTP(writer, r)
 		}}
 
 	httpServer := http.Server{

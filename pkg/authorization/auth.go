@@ -81,7 +81,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
 
 // credentialCheck verifies the proxy credentials if any
 func (auth *Authorizer) credentialCheck(r *http.Request) error {
-	if auth.JWT != ""{
+	if auth.JWT != "" {
 		if r.Header.Get("Authorization") != auth.JWT {
 			return errors.New("request not authorized")
 		}

@@ -22,6 +22,7 @@ type Config struct {
 	Logger   *zap.Logger
 	NodeURL  *url.URL
 	NodeCred authorization.Credentials // credentials to authorize with node
+	Body     []byte
 }
 
 func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
@@ -56,6 +57,15 @@ func (conf *Config) ProxyDirector(req *http.Request) {
 	} else if conf.NodeCred.Username != "" || conf.NodeCred.Password != "" {
 		req.SetBasicAuth(conf.NodeCred.Username, conf.NodeCred.Password)
 	}
+	reqBody, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		conf.Body = nil
+		conf.Logger.Error("failed to get body", zap.Error(err))
+		return
+	}
+	conf.Body = reqBody
+	buf := bytes.NewBuffer(reqBody)
+	req.Body = ioutil.NopCloser(buf)
 }
 
 func (conf *Config) ModifyResponse(r *http.Response) error {
