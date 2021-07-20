@@ -35,7 +35,7 @@ func CopyHeader(dst, src http.Header) {
 func ConvertEnv2Map(env string) map[string]bool {
 	envList := strings.Split(os.Getenv(env), ",")
 	envMap := map[string]bool{}
-	if len(envList) == 0 {
+	if os.Getenv(env)=="" || len(envList) == 0 {
 		envMap = nil
 	} else {
 		for i := range envList {
