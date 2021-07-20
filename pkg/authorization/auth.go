@@ -1,6 +1,7 @@
 package authorization
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -123,5 +124,7 @@ func (auth *Authorizer) whitelistCheck(w http.ResponseWriter, r *http.Request) e
 		auth.Logger.Error("method not allowed", zap.String("method", jrpcReq.Method))
 		return fmt.Errorf("method not allow: %v", jrpcReq.Method)
 	}
+	buf := bytes.NewBuffer(raw)
+	r.Body = ioutil.NopCloser(buf)
 	return nil
 }
