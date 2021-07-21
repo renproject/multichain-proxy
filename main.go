@@ -26,7 +26,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// create auth middleware
 	auth := authorization.NewAuthorizer(logger)
+
+	// create node proxy
 	conf, err := proxy.NewConfig(logger)
 	if err != nil {
 		logger.Fatal("failed to create proxy", zap.Error(err))
@@ -35,6 +39,7 @@ func main() {
 	logger.Info("starting proxy")
 	defer logger.Info("stopping proxy")
 
+	// setup reverse proxy for the node
 	proxyServer := &httputil.ReverseProxy{Director: conf.ProxyDirector}
 
 	httpServer := http.Server{

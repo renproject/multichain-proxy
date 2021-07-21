@@ -15,6 +15,7 @@ type Config struct {
 	NodeCred authorization.Credentials // credentials to authorize with node
 }
 
+// NewConfig creates a new proxy config from the given env vars
 func NewConfig(logger *zap.Logger) (*Config, error) {
 	nodeURL := os.Getenv("NODE_URL")
 	if nodeURL == "" {
@@ -35,6 +36,7 @@ func NewConfig(logger *zap.Logger) (*Config, error) {
 	}, nil
 }
 
+// ProxyDirector handles how the request is proxied to the target node and does modifications to the request payload as required
 func (conf *Config) ProxyDirector(req *http.Request) {
 	req.Header.Set("X-Forwarded-Host", req.Host)
 	req.Header.Set("X-Origin-Host", conf.NodeURL.Host)
