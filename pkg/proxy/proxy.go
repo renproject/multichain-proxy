@@ -25,6 +25,7 @@ type Config struct {
 	Body     []byte
 }
 
+// NewConfig creates a new proxy config from the given env vars
 func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
 	nodeURL := os.Getenv(fmt.Sprintf("NODE%v_URL", nodeID))
 	if nodeURL == "" {
@@ -45,6 +46,7 @@ func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
 	}, nil
 }
 
+// ProxyDirector is handles how the request is proxied to the target node and does modifications to the request payload as required
 func (conf *Config) ProxyDirector(req *http.Request) {
 	req.Header.Set("X-Forwarded-Host", req.Host)
 	req.Header.Set("X-Origin-Host", conf.NodeURL.Host)
@@ -68,6 +70,7 @@ func (conf *Config) ProxyDirector(req *http.Request) {
 	req.Body = ioutil.NopCloser(buf)
 }
 
+// ModifyResponse verifies the response from the node and throws errors to invoke the proxy ErrorHandler in case error response is returned from node
 func (conf *Config) ModifyResponse(r *http.Response) error {
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {

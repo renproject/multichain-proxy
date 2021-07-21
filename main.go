@@ -28,11 +28,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// create auth middleware
 	auth := authorization.NewAuthorizer(logger)
+
+	// proxy for node 1
 	conf1, err := proxy.NewConfig(logger, "1")
 	if err != nil {
 		logger.Fatal("failed to create proxy-1", zap.Error(err))
 	}
+
+	// proxy for node 2
 	conf2, err := proxy.NewConfig(logger, "2")
 	if err != nil {
 		logger.Fatal("failed to create proxy-2", zap.Error(err))
@@ -41,13 +47,18 @@ func main() {
 	defer logger.Info("stopping proxy")
 
 	proxyServer2 := &httputil.ReverseProxy{Director: conf2.ProxyDirector}
+
+	// setup node 1 proxy to forward request to node 2 in case of error response
 	proxyServer1 := &httputil.ReverseProxy{
 		Director:       conf1.ProxyDirector,
 		ModifyResponse: conf1.ModifyResponse,
 		ErrorHandler: func(writer http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("node1 failed to respond", zap.Error(err))
+
+			// update the request body for node 2 to the original request
 			buf := bytes.NewBuffer(conf1.Body)
 			r.Body = ioutil.NopCloser(buf)
+
 			proxyServer2.ServeHTTP(writer, r)
 		}}
 
