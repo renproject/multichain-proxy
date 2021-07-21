@@ -46,7 +46,7 @@ func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
 	}, nil
 }
 
-// ProxyDirector is handles how the request is proxied to the target node and does modifications to the request payload as required
+// ProxyDirector handles how the request is proxied to the target node and does modifications to the request payload as required
 func (conf *Config) ProxyDirector(req *http.Request) {
 	req.Header.Set("X-Forwarded-Host", req.Host)
 	req.Header.Set("X-Origin-Host", conf.NodeURL.Host)
