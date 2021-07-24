@@ -53,6 +53,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// check if path is allowed, if path map is nil allow all paths
 		if auth.Paths != nil && !auth.Paths[r.URL.EscapedPath()] {
+			auth.Logger.Debug("requested path not allowed", zap.String("path", r.URL.EscapedPath()))
 			if err := util.WriteError(w, -1, fmt.Errorf("path not allowed %v", r.URL.EscapedPath())); err != nil {
 				auth.Logger.Error("error writing response", zap.Error(err))
 			}
@@ -61,14 +62,18 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
 
 		// check if valid proxy credentials
 		if err := auth.credentialCheck(r); err != nil {
+			auth.Logger.Debug("auth check", zap.Error(err))
 			if err = util.WriteError(w, -1, err); err != nil {
 				auth.Logger.Error("error writing response", zap.Error(err))
 			}
 			return
 		}
 
-		// check if valid rpc function
-		if err := auth.whitelistCheck(w, r); err != nil {
+		// check if valid rpc method
+		requestBody, err := auth.whitelistCheck(w, r)
+		auth.Logger.Debug("request info", zap.Any("headers",r.Header), zap.String("requestBody", requestBody), zap.String("path", r.URL.EscapedPath()))
+		if err != nil {
+			auth.Logger.Debug("method check", zap.Error(err))
 			if err = util.WriteError(w, -1, err); err != nil {
 				auth.Logger.Error("error writing response", zap.Error(err))
 			}
@@ -98,7 +103,7 @@ func (auth *Authorizer) credentialCheck(r *http.Request) error {
 }
 
 // whitelistCheck verifies whether the rpc function is allowed or not
-func (auth *Authorizer) whitelistCheck(w http.ResponseWriter, r *http.Request) error {
+func (auth *Authorizer) whitelistCheck(w http.ResponseWriter, r *http.Request) (string, error) {
 
 	// Restrict the maximum request body size. There should be no reason to
 	// allow requests of unbounded size.
@@ -112,21 +117,21 @@ func (auth *Authorizer) whitelistCheck(w http.ResponseWriter, r *http.Request) e
 	raw, err := ioutil.ReadAll(sizeLimitedBody)
 	if err != nil {
 		auth.Logger.Error("error reading size limited body", zap.Error(err))
-		return errors.New("invalid size limited body")
+		return "", errors.New("invalid size limited body")
 	}
 
 	jrpcReq := JSONRPCRequest{}
 	if err := json.Unmarshal(raw, &jrpcReq); err != nil {
-		auth.Logger.Error("error unmarshaling", zap.Error(err))
-		return errors.New("invalid json")
+		auth.Logger.Error("error unmarshalling", zap.Error(err))
+		return string(raw), errors.New("invalid json")
 	}
 
 	// verify if method is allowed, if method map is nil allow all methods
 	if auth.Methods != nil && !auth.Methods[jrpcReq.Method] {
 		auth.Logger.Error("method not allowed", zap.String("method", jrpcReq.Method))
-		return fmt.Errorf("method not allow: %v", jrpcReq.Method)
+		return string(raw), fmt.Errorf("method not allow: %v", jrpcReq.Method)
 	}
 	buf := bytes.NewBuffer(raw)
 	r.Body = ioutil.NopCloser(buf)
-	return nil
+	return string(raw), nil
 }

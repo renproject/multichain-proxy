@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -22,9 +23,17 @@ func main() {
 	if host == "" {
 		host = "0.0.0.0"
 	}
+
 	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if strings.ToLower(os.Getenv("DEV_MODE"))=="true"{
+		logger, err = zap.NewDevelopment()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// create auth middleware
