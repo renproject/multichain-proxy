@@ -116,19 +116,16 @@ func (auth *Authorizer) whitelistCheck(w http.ResponseWriter, r *http.Request) (
 
 	raw, err := ioutil.ReadAll(sizeLimitedBody)
 	if err != nil {
-		auth.Logger.Error("error reading size limited body", zap.Error(err))
 		return "", errors.New("invalid size limited body")
 	}
 
 	jrpcReq := JSONRPCRequest{}
 	if err := json.Unmarshal(raw, &jrpcReq); err != nil {
-		auth.Logger.Error("error unmarshalling", zap.Error(err))
 		return string(raw), errors.New("invalid json")
 	}
 
 	// verify if method is allowed, if method map is nil allow all methods
 	if auth.Methods != nil && !auth.Methods[jrpcReq.Method] {
-		auth.Logger.Error("method not allowed", zap.String("method", jrpcReq.Method))
 		return string(raw), fmt.Errorf("method not allow: %v", jrpcReq.Method)
 	}
 	buf := bytes.NewBuffer(raw)
