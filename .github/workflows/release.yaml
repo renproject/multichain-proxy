@@ -1,0 +1,37 @@
+name: release
+
+on:
+  release:
+    types: [published, edited]
+    branches:
+      - 'master'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Release Tag
+        id: extract-realease-tag
+        run: |
+            echo ::set-output name=release::$(echo renproject/multichain-proxy:${GITHUB_REF##*/})
+
+      -
+        name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ${{ steps.extract-realease-tag.outputs.release }}
+      -
+        name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
