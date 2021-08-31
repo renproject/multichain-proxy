@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/renproject/multichain-proxy/pkg/util"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
 	"os"
+
+	"github.com/renproject/multichain-proxy/pkg/util"
+	"go.uber.org/zap"
 )
 
 type Credentials struct {
@@ -18,12 +19,17 @@ type Credentials struct {
 	Password string `json:"password,omitempty"`
 }
 
+type ProxyConfig struct {
+	Path string `json:"path"`
+	Credentials
+}
 type Authorizer struct {
 	Credentials
 	Logger     *zap.Logger     `json:"-,omitempty"`
 	MaxReqSize int64           `json:"maxReqSize"`
 	Methods    map[string]bool `json:"methods"`
 	Paths      map[string]bool `json:"paths"`
+	Config     ProxyConfig     `json:"config"`
 }
 
 type JSONRPCRequest struct {
@@ -45,12 +51,33 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 		},
 		Methods: util.ConvertEnv2Map("PROXY_METHODS"),
 		Paths:   util.ConvertEnv2Map("PROXY_PATHS"),
+		Config: ProxyConfig{
+			Path: os.Getenv("CONFIG_PATH"),
+			Credentials: Credentials{
+				JWT:      os.Getenv("CONFIG_TOKEN"),
+				Username: os.Getenv("CONFIG_USER"),
+				Password: os.Getenv("CONFIG_PASSWORD"),
+			},
+		},
 	}
 }
 
 // AuthorizeProxy middleware authorizes all the rpc calls
-func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
+func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth.Logger.Info(r.URL.EscapedPath())
+		if auth.Config.Path == r.URL.EscapedPath() {
+			if err := auth.credentialCheck(r, true); err != nil {
+				auth.Logger.Debug("auth[config-path] check", zap.Error(err))
+				if err = util.WriteError(w, -1, err); err != nil {
+					auth.Logger.Error("error writing response", zap.Error(err))
+				}
+				return
+			}
+			renProxy.ServeHTTP(w, r)
+			return
+		}
+
 		// check if path is allowed, if path map is nil allow all paths
 		if auth.Paths != nil && !auth.Paths[r.URL.EscapedPath()] {
 			auth.Logger.Debug("requested path not allowed", zap.String("path", r.URL.EscapedPath()))
@@ -61,7 +88,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
 		}
 
 		// check if valid proxy credentials
-		if err := auth.credentialCheck(r); err != nil {
+		if err := auth.credentialCheck(r, false); err != nil {
 			auth.Logger.Debug("auth check", zap.Error(err))
 			if err = util.WriteError(w, -1, err); err != nil {
 				auth.Logger.Error("error writing response", zap.Error(err))
@@ -71,7 +98,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
 
 		// check if valid rpc method
 		requestBody, err := auth.whitelistCheck(w, r)
-		auth.Logger.Debug("request info", zap.Any("headers",r.Header), zap.String("requestBody", requestBody), zap.String("path", r.URL.EscapedPath()))
+		auth.Logger.Debug("request info", zap.Any("headers", r.Header), zap.String("requestBody", requestBody), zap.String("path", r.URL.EscapedPath()))
 		if err != nil {
 			auth.Logger.Debug("method check", zap.Error(err))
 			if err = util.WriteError(w, -1, err); err != nil {
@@ -85,17 +112,21 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler) http.Handler {
 }
 
 // credentialCheck verifies the proxy credentials if any
-func (auth *Authorizer) credentialCheck(r *http.Request) error {
-	if auth.JWT != ""{
-		if r.Header.Get("Authorization") != auth.JWT {
+func (auth *Authorizer) credentialCheck(r *http.Request, configCheck bool) error {
+	cred := auth.Credentials
+	if configCheck {
+		cred = auth.Config.Credentials
+	}
+	if cred.JWT != "" {
+		if r.Header.Get("Authorization") != cred.JWT {
 			return errors.New("request not authorized")
 		}
-	} else if auth.Username != "" || auth.Password != "" {
+	} else if cred.Username != "" || cred.Password != "" {
 		user, pass, ok := r.BasicAuth()
 		if !ok {
 			return errors.New("request not authorized")
 		}
-		if user != auth.Username || pass != auth.Password {
+		if user != cred.Username || pass != cred.Password {
 			return errors.New("request not authorized")
 		}
 	}
