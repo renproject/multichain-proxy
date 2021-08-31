@@ -19,17 +19,14 @@ type Credentials struct {
 	Password string `json:"password,omitempty"`
 }
 
-type ProxyConfig struct {
-	Path string `json:"path"`
-	Credentials
-}
 type Authorizer struct {
 	Credentials
-	Logger     *zap.Logger     `json:"-,omitempty"`
-	MaxReqSize int64           `json:"maxReqSize"`
-	Methods    map[string]bool `json:"methods"`
-	Paths      map[string]bool `json:"paths"`
-	Config     ProxyConfig     `json:"config"`
+	Logger           *zap.Logger     `json:"-,omitempty"`
+	MaxReqSize       int64           `json:"maxReqSize"`
+	Methods          map[string]bool `json:"methods"`
+	Paths            map[string]bool `json:"paths"`
+	ConfigPath       string          `json:"configPath"`
+	ConfigCredential Credentials     `json:"configCredential"`
 }
 
 type JSONRPCRequest struct {
@@ -49,15 +46,13 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 			Username: os.Getenv("PROXY_USER"),
 			Password: os.Getenv("PROXY_PASSWORD"),
 		},
-		Methods: util.ConvertEnv2Map("PROXY_METHODS"),
-		Paths:   util.ConvertEnv2Map("PROXY_PATHS"),
-		Config: ProxyConfig{
-			Path: os.Getenv("CONFIG_PATH"),
-			Credentials: Credentials{
-				JWT:      os.Getenv("CONFIG_TOKEN"),
-				Username: os.Getenv("CONFIG_USER"),
-				Password: os.Getenv("CONFIG_PASSWORD"),
-			},
+		Methods:    util.ConvertEnv2Map("PROXY_METHODS"),
+		Paths:      util.ConvertEnv2Map("PROXY_PATHS"),
+		ConfigPath: os.Getenv("CONFIG_PATH"),
+		ConfigCredential: Credentials{
+			JWT:      os.Getenv("CONFIG_TOKEN"),
+			Username: os.Getenv("CONFIG_USER"),
+			Password: os.Getenv("CONFIG_PASSWORD"),
 		},
 	}
 }
@@ -65,7 +60,7 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 // AuthorizeProxy middleware authorizes all the rpc calls
 func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if auth.Config.Path == r.URL.EscapedPath() {
+		if auth.ConfigPath == r.URL.EscapedPath() {
 			if err := auth.credentialCheck(r, true); err != nil {
 				auth.Logger.Debug("auth[config-path] check", zap.Error(err))
 				if err = util.WriteError(w, -1, err); err != nil {
@@ -114,7 +109,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler)
 func (auth *Authorizer) credentialCheck(r *http.Request, configCheck bool) error {
 	cred := auth.Credentials
 	if configCheck {
-		cred = auth.Config.Credentials
+		cred = auth.ConfigCredential
 	}
 	if cred.JWT != "" {
 		if r.Header.Get("Authorization") != cred.JWT {

@@ -14,6 +14,11 @@ import (
 	"go.uber.org/zap"
 )
 
+type ProxyConfig struct {
+	Url string `json:"url"`
+	authorization.Credentials
+}
+
 type Config struct {
 	Logger   *zap.Logger
 	Lock     *sync.RWMutex
@@ -64,7 +69,7 @@ func (conf *Config) ProxyDirector(req *http.Request) {
 func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 	conf.Lock.Lock()
 	defer conf.Lock.Unlock()
-	var payload authorization.ProxyConfig
+	var payload ProxyConfig
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		conf.Logger.Debug("payload decode failed")
@@ -73,10 +78,17 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	nURL, err := url.Parse(payload.Path)
+	if payload.Url == "" {
+		conf.Logger.Debug("empty node url")
+		if err := util.WriteError(w, -1, fmt.Errorf("empty node url")); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+	nURL, err := url.Parse(payload.Url)
 	if err != nil {
 		conf.Logger.Debug("invalid node url")
-		if err := util.WriteError(w, -1, fmt.Errorf("invalid node url, %v", payload.Path)); err != nil {
+		if err := util.WriteError(w, -1, fmt.Errorf("invalid node url, url=%v, error=%w", payload.Url, err)); err != nil {
 			conf.Logger.Error("error writing response", zap.Error(err))
 		}
 		return
