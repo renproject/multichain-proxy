@@ -3,10 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/renproject/multichain-proxy/pkg/authorization"
-	"github.com/renproject/multichain-proxy/pkg/proxy"
-	"github.com/rs/cors"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,6 +10,11 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/renproject/multichain-proxy/pkg/authorization"
+	"github.com/renproject/multichain-proxy/pkg/proxy"
+	"github.com/rs/cors"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -30,7 +31,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if strings.ToLower(os.Getenv("DEV_MODE"))=="true"{
+	if strings.ToLower(os.Getenv("DEV_MODE")) == "true" {
 		logger, err = zap.NewDevelopment()
 		if err != nil {
 			log.Fatal(err)
@@ -79,7 +80,7 @@ func main() {
 			AllowedOrigins:   []string{"*"},
 			AllowCredentials: true,
 			AllowedMethods:   []string{"POST", "GET"},
-		}).Handler(auth.AuthorizeProxy(proxyServer1)),
+		}).Handler(auth.AuthorizeProxy(proxyServer1, http.HandlerFunc(conf1.ProxyConfig), http.HandlerFunc(conf2.ProxyConfig))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
 

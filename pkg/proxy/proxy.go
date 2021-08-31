@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/renproject/multichain-proxy/pkg/authorization"
-	"go.uber.org/zap"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
+
+	"github.com/renproject/multichain-proxy/pkg/authorization"
+	"github.com/renproject/multichain-proxy/pkg/util"
+	"go.uber.org/zap"
 )
 
 type JSONRPCResponse struct {
@@ -18,8 +21,14 @@ type JSONRPCResponse struct {
 	Error  interface{} `json:"error"`
 }
 
+type ProxyConfig struct {
+	Url string `json:"url"`
+	authorization.Credentials
+}
+
 type Config struct {
 	Logger   *zap.Logger
+	Lock     *sync.RWMutex
 	NodeURL  *url.URL
 	NodeCred authorization.Credentials // credentials to authorize with node
 	Body     []byte
@@ -37,6 +46,7 @@ func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
 	}
 	return &Config{
 		Logger:  logger,
+		Lock:    &sync.RWMutex{},
 		NodeURL: nURL,
 		NodeCred: authorization.Credentials{
 			JWT:      os.Getenv(fmt.Sprintf("NODE%v_TOKEN", nodeID)),
@@ -48,6 +58,8 @@ func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
 
 // ProxyDirector handles how the request is proxied to the target node and does modifications to the request payload as required
 func (conf *Config) ProxyDirector(req *http.Request) {
+	conf.Lock.RLock()
+	defer conf.Lock.RUnlock()
 	req.Header.Set("X-Forwarded-Host", req.Host)
 	req.Header.Set("X-Origin-Host", conf.NodeURL.Host)
 	req.Host = conf.NodeURL.Host
@@ -86,4 +98,39 @@ func (conf *Config) ModifyResponse(r *http.Response) error {
 	buf := bytes.NewBuffer(bodyBytes)
 	r.Body = ioutil.NopCloser(buf)
 	return nil
+}
+
+// ProxyConfig handles admin request to update proxy configs
+func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
+	conf.Lock.Lock()
+	defer conf.Lock.Unlock()
+	var payload ProxyConfig
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		conf.Logger.Debug("payload decode failed")
+		if err := util.WriteError(w, -1, fmt.Errorf("malformed payload")); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+	if payload.Url == "" {
+		conf.Logger.Debug("empty node url")
+		if err := util.WriteError(w, -1, fmt.Errorf("empty node url")); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+	nURL, err := url.Parse(payload.Url)
+	if err != nil {
+		conf.Logger.Debug("invalid node url")
+		if err := util.WriteError(w, -1, fmt.Errorf("invalid node url, url=%v, error=%w", payload.Url, err)); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+	conf.NodeURL = nURL
+	conf.NodeCred = payload.Credentials
+	if err := util.WriteResponse(w, 1, "successfully updated"); err != nil {
+		conf.Logger.Error("error writing response", zap.Error(err))
+	}
 }

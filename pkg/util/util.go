@@ -18,6 +18,16 @@ func WriteError(dst http.ResponseWriter, id interface{}, err error) error {
 	})
 }
 
+func WriteResponse(dst http.ResponseWriter, id interface{}, message interface{}) error {
+	dst.Header().Set("content-type", "application/json")
+	dst.WriteHeader(http.StatusOK)
+	return json.NewEncoder(dst).Encode(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"result":  message,
+	})
+}
+
 func CopyResponse(dst http.ResponseWriter, res *http.Response) {
 	CopyHeader(dst.Header(), res.Header)
 	dst.WriteHeader(res.StatusCode)
