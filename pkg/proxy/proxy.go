@@ -73,7 +73,6 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	conf.Logger.Info("test", zap.Any("payload", payload.Credentials))
 	nURL, err := url.Parse(payload.Path)
 	if err != nil {
 		conf.Logger.Debug("invalid node url")

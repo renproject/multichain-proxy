@@ -65,7 +65,6 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 // AuthorizeProxy middleware authorizes all the rpc calls
 func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth.Logger.Info(r.URL.EscapedPath())
 		if auth.Config.Path == r.URL.EscapedPath() {
 			if err := auth.credentialCheck(r, true); err != nil {
 				auth.Logger.Debug("auth[config-path] check", zap.Error(err))
