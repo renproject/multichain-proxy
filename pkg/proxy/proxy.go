@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/renproject/multichain-proxy/pkg/authorization"
@@ -60,12 +61,18 @@ func NewConfig(logger *zap.Logger, nodeID string) (*Config, error) {
 func (conf *Config) ProxyDirector(req *http.Request) {
 	conf.Lock.RLock()
 	defer conf.Lock.RUnlock()
+	conf.Logger.Debug("proxy data at start", zap.Any("request", req.Host), zap.Any("request-url", req.URL), zap.Any("request-url", req.URL.RawPath), zap.Any("request-url", req.URL.Path), zap.Any("node", conf.NodeURL.Host), zap.Any("node-url", conf.NodeURL))
+
 	req.Header.Set("X-Forwarded-Host", req.Host)
 	req.Header.Set("X-Origin-Host", conf.NodeURL.Host)
 	req.Host = conf.NodeURL.Host
 	req.URL.Scheme = conf.NodeURL.Scheme
 	req.URL.Host = conf.NodeURL.Host
+	req.URL.Path = strings.TrimRight(conf.NodeURL.Path, "/") + strings.TrimRight(req.URL.Path, "/")
 
+	conf.Logger.Debug("proxy data after modification", zap.Any("request", req.Host), zap.Any("request-url", req.URL), zap.Any("request-url", req.URL.RawPath), zap.Any("request-url", req.URL.Path), zap.Any("node", conf.NodeURL.Host), zap.Any("node-url", conf.NodeURL))
+
+	req.Header.Del("Authorization")
 	if conf.NodeCred.JWT != "" {
 		req.Header.Set("Authorization", conf.NodeCred.JWT)
 	} else if conf.NodeCred.Username != "" || conf.NodeCred.Password != "" {
@@ -133,4 +140,5 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 	if err := util.WriteResponse(w, 1, "successfully updated"); err != nil {
 		conf.Logger.Error("error writing response", zap.Error(err))
 	}
+	conf.Logger.Debug("proxy config update", zap.Any("url", conf.NodeURL), zap.Any("cred", conf.NodeCred))
 }
