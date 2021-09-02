@@ -76,6 +76,15 @@ func (conf *Config) ProxyDirector(req *http.Request) {
 func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 	conf.Lock.Lock()
 	defer conf.Lock.Unlock()
+	if r.Method == "GET" {
+		if err := util.WriteResponse(w, 1, ProxyConfig{
+			Url:         conf.NodeURL.String(),
+			Credentials: conf.NodeCred,
+		}); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
 	var payload ProxyConfig
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
@@ -86,11 +95,13 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if payload.Url == "" {
-		conf.Logger.Debug("empty node url")
-		if err := util.WriteError(w, -1, fmt.Errorf("empty node url")); err != nil {
-			conf.Logger.Error("error writing response", zap.Error(err))
+		conf.Logger.Debug("empty url sent setting to default values")
+		payload.Url = os.Getenv("NODE_URL")
+		payload.Credentials = authorization.Credentials{
+			JWT:      os.Getenv("NODE_TOKEN"),
+			Username: os.Getenv("NODE_USER"),
+			Password: os.Getenv("NODE_PASSWORD"),
 		}
-		return
 	}
 	nURL, err := url.Parse(payload.Url)
 	if err != nil {
