@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,42 +11,62 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/renproject/multichain-proxy/pkg/database"
+	"github.com/renproject/multichain-proxy/pkg/shared"
+
 	"github.com/renproject/multichain-proxy/pkg/authorization"
 	"github.com/renproject/multichain-proxy/pkg/util"
 	"go.uber.org/zap"
 )
 
-type ProxyConfig struct {
-	Url string `json:"url"`
-	authorization.Credentials
-}
-
 type Config struct {
 	Logger   *zap.Logger
 	Lock     *sync.RWMutex
 	NodeURL  *url.URL
+	DB       *database.DBManager
+	Key      string
 	NodeCred authorization.Credentials // credentials to authorize with node
 }
 
 // NewConfig creates a new proxy config from the given env vars
-func NewConfig(logger *zap.Logger) (*Config, error) {
+func NewConfig(logger *zap.Logger, db *database.DBManager) (*Config, error) {
+	key := os.Getenv("NODE_KEY")
+	if key == "" {
+		return nil, errors.New("missing node key")
+	}
+	config, err := db.GetConfig(context.Background(), key)
+	if err != nil {
+		return nil, err
+	}
 	nodeURL := os.Getenv("NODE_URL")
-	if nodeURL == "" {
-		return nil, errors.New("missing node url")
+	creds := authorization.Credentials{
+		JWT:      os.Getenv("NODE_TOKEN"),
+		Username: os.Getenv("NODE_USER"),
+		Password: os.Getenv("NODE_PASSWORD"),
+	}
+	if config == nil {
+		if nodeURL == "" {
+			return nil, errors.New("missing node url")
+		}
+		err = db.CreateConfig(context.Background(), key, shared.ProxyConfig{Url: nodeURL, Credentials: creds})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		nodeURL = config.Url
+		creds = config.Credentials
 	}
 	nURL, err := url.Parse(nodeURL)
 	if err != nil {
 		return nil, errors.New("invalid node url")
 	}
 	return &Config{
-		Logger:  logger,
-		Lock:    &sync.RWMutex{},
-		NodeURL: nURL,
-		NodeCred: authorization.Credentials{
-			JWT:      os.Getenv("NODE_TOKEN"),
-			Username: os.Getenv("NODE_USER"),
-			Password: os.Getenv("NODE_PASSWORD"),
-		},
+		Key:      key,
+		DB:       db,
+		Logger:   logger,
+		Lock:     &sync.RWMutex{},
+		NodeURL:  nURL,
+		NodeCred: creds,
 	}, nil
 }
 
@@ -77,7 +98,7 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 	conf.Lock.Lock()
 	defer conf.Lock.Unlock()
 	if r.Method == "GET" {
-		if err := util.WriteResponse(w, 1, ProxyConfig{
+		if err := util.WriteResponse(w, 1, shared.ProxyConfig{
 			Url:         conf.NodeURL.String(),
 			Credentials: conf.NodeCred,
 		}); err != nil {
@@ -85,7 +106,7 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	var payload ProxyConfig
+	var payload shared.ProxyConfig
 	err := json.NewDecoder(r.Body).Decode(&payload)
 	if err != nil {
 		conf.Logger.Debug("payload decode failed")
@@ -105,7 +126,7 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	nURL, err := url.Parse(payload.Url)
 	if err != nil {
-		conf.Logger.Debug("invalid node url")
+		conf.Logger.Debug("invalid node url", zap.Error(err))
 		if err := util.WriteError(w, -1, fmt.Errorf("invalid node url, url=%v, error=%w", payload.Url, err)); err != nil {
 			conf.Logger.Error("error writing response", zap.Error(err))
 		}
@@ -113,7 +134,15 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	conf.NodeURL = nURL
 	conf.NodeCred = payload.Credentials
-	if err := util.WriteResponse(w, 1, "successfully updated"); err != nil {
+	err = conf.DB.UpdateConfig(context.Background(), conf.Key, payload)
+	if err != nil {
+		conf.Logger.Debug("failed to update config in db", zap.Error(err))
+		if err := util.WriteError(w, -1, fmt.Errorf("failed to update config in db , error=%w", err)); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+	if err = util.WriteResponse(w, 1, "successfully updated"); err != nil {
 		conf.Logger.Error("error writing response", zap.Error(err))
 	}
 	conf.Logger.Debug("proxy config update", zap.Any("url", conf.NodeURL), zap.Any("cred", conf.NodeCred))
