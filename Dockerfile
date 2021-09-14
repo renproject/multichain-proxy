@@ -48,6 +48,11 @@ ENV PROXY_PATHS=""
 # config path used to remotely update proxy
 ENV CONFIG_PATH="/proxy/config"
 
+# config for DB
+ENV DB_SERVER="mongodb://mongo-service:27017"
+ENV DB_USER="admin"
+ENV DB_PASSWORD="password"
+
 # EXPORT PORT FOR HTTP PROXY
 EXPOSE 8080
 
