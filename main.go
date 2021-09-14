@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
-	"github.com/renproject/multichain-proxy/pkg/authorization"
-	"github.com/renproject/multichain-proxy/pkg/proxy"
-	"github.com/rs/cors"
-	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/renproject/multichain-proxy/pkg/authorization"
+	"github.com/renproject/multichain-proxy/pkg/proxy"
+	"github.com/rs/cors"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if strings.ToLower(os.Getenv("DEV_MODE"))=="true"{
+	if strings.ToLower(os.Getenv("DEV_MODE")) == "true" {
 		logger, err = zap.NewDevelopment()
 		if err != nil {
 			log.Fatal(err)
@@ -45,7 +46,7 @@ func main() {
 		logger.Fatal("failed to create proxy", zap.Error(err))
 	}
 
-	logger.Info("starting proxy")
+	logger.Info("starting proxy", zap.String("port", port))
 	defer logger.Info("stopping proxy")
 
 	// setup reverse proxy for the node
@@ -60,7 +61,7 @@ func main() {
 			AllowedOrigins:   []string{"*"},
 			AllowCredentials: true,
 			AllowedMethods:   []string{"POST", "GET"},
-		}).Handler(auth.AuthorizeProxy(proxyServer)),
+		}).Handler(auth.AuthorizeProxy(proxyServer, http.HandlerFunc(conf.ProxyConfig))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
 
