@@ -88,7 +88,9 @@ func (db *DBManager) CreateConfig(ctx context.Context, key string, value shared.
 }
 
 func (db *DBManager) UpdateConfig(ctx context.Context, key string, value shared.ProxyConfig) error {
-	_, err := db.ConfigCollection.UpdateOne(ctx, bson.D{{"key", key}}, shared.ProxyConfigDB{Key: key, Value: value})
+	_, err := db.ConfigCollection.UpdateOne(ctx, bson.D{{"key", key}}, bson.D{{"$set", bson.D{{
+		"value", value}},
+	}})
 	if err != nil {
 		return fmt.Errorf("failed to update entry, error: %w", err)
 	}
