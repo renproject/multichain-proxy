@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/renproject/multichain-proxy/pkg/database"
+
 	"github.com/renproject/multichain-proxy/pkg/authorization"
 	"github.com/renproject/multichain-proxy/pkg/proxy"
 	"github.com/rs/cors"
@@ -41,14 +43,20 @@ func main() {
 	// create auth middleware
 	auth := authorization.NewAuthorizer(logger)
 
+	// create db instance
+	db, err := database.NewDBManager()
+	if err != nil {
+		logger.Fatal("failed to create db instance", zap.Error(err))
+	}
+
 	// proxy for node 1
-	conf1, err := proxy.NewConfig(logger, "1")
+	conf1, err := proxy.NewConfig(logger, "1", db)
 	if err != nil {
 		logger.Fatal("failed to create proxy-1", zap.Error(err))
 	}
 
 	// proxy for node 2
-	conf2, err := proxy.NewConfig(logger, "2")
+	conf2, err := proxy.NewConfig(logger, "2", db)
 	if err != nil {
 		logger.Fatal("failed to create proxy-2", zap.Error(err))
 	}
