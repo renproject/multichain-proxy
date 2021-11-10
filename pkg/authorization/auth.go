@@ -131,14 +131,17 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, def1 http.Handler, def
 			if !strings.HasPrefix(r.URL.Path, "/") {
 				r.URL.Path = "/" + r.URL.Path
 			}
+			auth.Logger.Debug("proxy to local node-1")
 			def1.ServeHTTP(w, r)
 		} else if strings.HasPrefix(r.URL.EscapedPath(), auth.LocalNodePath+"/2") {
 			r.URL.Path = strings.TrimLeft(r.URL.Path, auth.LocalNodePath+"/2")
 			if !strings.HasPrefix(r.URL.Path, "/") {
 				r.URL.Path = "/" + r.URL.Path
 			}
+			auth.Logger.Debug("proxy to local node-2")
 			def2.ServeHTTP(w, r)
 		} else {
+			auth.Logger.Debug("proxy to config node")
 			next.ServeHTTP(w, r)
 		}
 	})
