@@ -24,6 +24,14 @@
 | DB_USER        | MongoDB Username                                         | Yes                       | "admin"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | DB_PASSWORD    | MongoDB Password                                         | Yes                       | "password"                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
+
+## Endpoints
+
+- `/` : proxy to node set in config
+- `/renlocal/` : proxy to default local node
+- `/proxy/config` : proxy config for node
+- `/renlocal/proxy/config` : proxy config for local node
+
 ## Design Goals
 
 - handle any proxy requests to rpc server
@@ -33,10 +41,3 @@
 - should be able to handle both jwt and username/password auth mechanisms
 - proxy and node can have different auth mechanisms and auth credentials
 - remote proxy config endpoint to update the proxy config (node url and credentials)
-
-## Endpoints
-
-- `/` : proxy to node set in config
-- `/renlocal/` : proxy to default local node
-- `/proxy/config` : proxy config for node
-- `/renlocal/proxy/config` : proxy config for local node

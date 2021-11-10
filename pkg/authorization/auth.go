@@ -77,7 +77,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, def http.Handler, renP
 
 		if auth.LocalNodePath+auth.ConfigPath == r.URL.EscapedPath() {
 			if err := auth.credentialCheck(r, auth.ConfigCredential); err != nil {
-				auth.Logger.Debug("auth[config-path] check", zap.Error(err))
+				auth.Logger.Debug("auth[config-path-local] check", zap.Error(err))
 				if err = util.WriteError(w, -1, err); err != nil {
 					auth.Logger.Error("error writing response", zap.Error(err))
 				}
@@ -120,8 +120,10 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, def http.Handler, renP
 			if !strings.HasPrefix(r.URL.Path, "/") {
 				r.URL.Path = "/" + r.URL.Path
 			}
+			auth.Logger.Debug("proxy to local node")
 			def.ServeHTTP(w, r)
 		} else {
+			auth.Logger.Debug("proxy to config node")
 			next.ServeHTTP(w, r)
 		}
 	})
