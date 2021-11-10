@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/renproject/multichain-proxy/pkg/util"
 	"go.uber.org/zap"
@@ -27,6 +28,7 @@ type Authorizer struct {
 	Paths            map[string]bool `json:"paths"`
 	ConfigPath1      string          `json:"configPath1"`
 	ConfigPath2      string          `json:"configPath2"`
+	LocalNodePath    string          `json:"localPath"`
 	ConfigCredential Credentials     `json:"configCredential"`
 }
 
@@ -47,10 +49,11 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 			Username: os.Getenv("PROXY_USER"),
 			Password: os.Getenv("PROXY_PASSWORD"),
 		},
-		Methods:     util.ConvertEnv2Map("PROXY_METHODS"),
-		Paths:       util.ConvertEnv2Map("PROXY_PATHS"),
-		ConfigPath1: os.Getenv("CONFIG_PATH_1"),
-		ConfigPath2: os.Getenv("CONFIG_PATH_2"),
+		Methods:       util.ConvertEnv2Map("PROXY_METHODS"),
+		Paths:         util.ConvertEnv2Map("PROXY_PATHS"),
+		ConfigPath1:   os.Getenv("CONFIG_PATH_1"),
+		ConfigPath2:   os.Getenv("CONFIG_PATH_2"),
+		LocalNodePath: os.Getenv("LOCAL_NODE_PATH"),
 		ConfigCredential: Credentials{
 			JWT:      os.Getenv("CONFIG_TOKEN"),
 			Username: os.Getenv("CONFIG_USER"),
@@ -60,10 +63,10 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 }
 
 // AuthorizeProxy middleware authorizes all the rpc calls
-func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy1 http.Handler, renProxy2 http.Handler) http.Handler {
+func (auth *Authorizer) AuthorizeProxy(next http.Handler, def1 http.Handler, def2 http.Handler, renProxy1 http.Handler, renProxy2 http.Handler, renLocalProxy1 http.Handler, renLocalProxy2 http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth.ConfigPath1 == r.URL.EscapedPath() || auth.ConfigPath2 == r.URL.EscapedPath() {
-			if err := auth.credentialCheck(r, true); err != nil {
+			if err := auth.credentialCheck(r, auth.ConfigCredential); err != nil {
 				auth.Logger.Debug("auth[config-path] check", zap.Error(err))
 				if err = util.WriteError(w, -1, err); err != nil {
 					auth.Logger.Error("error writing response", zap.Error(err))
@@ -78,6 +81,22 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy1 http.Handler
 			return
 		}
 
+		if auth.LocalNodePath+auth.ConfigPath1 == r.URL.EscapedPath() || auth.LocalNodePath+auth.ConfigPath2 == r.URL.EscapedPath() {
+			if err := auth.credentialCheck(r, auth.ConfigCredential); err != nil {
+				auth.Logger.Debug("auth[config-path-local] check", zap.Error(err))
+				if err = util.WriteError(w, -1, err); err != nil {
+					auth.Logger.Error("error writing response", zap.Error(err))
+				}
+				return
+			}
+			if auth.LocalNodePath+auth.ConfigPath1 == r.URL.EscapedPath() {
+				renLocalProxy1.ServeHTTP(w, r)
+			} else {
+				renLocalProxy2.ServeHTTP(w, r)
+			}
+			return
+		}
+
 		// check if path is allowed, if path map is nil allow all paths
 		if auth.Paths != nil && !auth.Paths[r.URL.EscapedPath()] {
 			auth.Logger.Debug("requested path not allowed", zap.String("path", r.URL.EscapedPath()))
@@ -88,7 +107,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy1 http.Handler
 		}
 
 		// check if valid proxy credentials
-		if err := auth.credentialCheck(r, false); err != nil {
+		if err := auth.credentialCheck(r, auth.Credentials); err != nil {
 			auth.Logger.Debug("auth check", zap.Error(err))
 			if err = util.WriteError(w, -1, err); err != nil {
 				auth.Logger.Error("error writing response", zap.Error(err))
@@ -107,16 +126,26 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy1 http.Handler
 			return
 		}
 
-		next.ServeHTTP(w, r)
+		if strings.HasPrefix(r.URL.EscapedPath(), auth.LocalNodePath+"/1") {
+			r.URL.Path = strings.TrimLeft(r.URL.Path, auth.LocalNodePath+"/1")
+			if !strings.HasPrefix(r.URL.Path, "/") {
+				r.URL.Path = "/" + r.URL.Path
+			}
+			def1.ServeHTTP(w, r)
+		} else if strings.HasPrefix(r.URL.EscapedPath(), auth.LocalNodePath+"/2") {
+			r.URL.Path = strings.TrimLeft(r.URL.Path, auth.LocalNodePath+"/2")
+			if !strings.HasPrefix(r.URL.Path, "/") {
+				r.URL.Path = "/" + r.URL.Path
+			}
+			def2.ServeHTTP(w, r)
+		} else {
+			next.ServeHTTP(w, r)
+		}
 	})
 }
 
 // credentialCheck verifies the proxy credentials if any
-func (auth *Authorizer) credentialCheck(r *http.Request, configCheck bool) error {
-	cred := auth.Credentials
-	if configCheck {
-		cred = auth.ConfigCredential
-	}
+func (auth *Authorizer) credentialCheck(r *http.Request, cred Credentials) error {
 	if cred.JWT != "" {
 		if r.Header.Get("Authorization") != cred.JWT {
 			return errors.New("request not authorized")

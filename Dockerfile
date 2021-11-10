@@ -52,6 +52,7 @@ ENV PROXY_PATHS=""
 # config path used to remotely update proxy
 ENV CONFIG_PATH_1="/proxy/config/1"
 ENV CONFIG_PATH_2="/proxy/config/2"
+ENV LOCAL_NODE_PATH="/renlocal"
 
 # config for DB
 ENV DB_SERVER="mongodb://mongo-service:27017"
