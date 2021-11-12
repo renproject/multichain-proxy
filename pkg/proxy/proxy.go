@@ -34,36 +34,39 @@ type Config struct {
 	Body     []byte
 	DB       *database.DBManager
 	Key      string
+	Local    bool // flag to mark proxy as the local node
 }
 
 // NewConfig creates a new proxy config from the given env vars
-func NewConfig(logger *zap.Logger, nodeID string, db *database.DBManager) (*Config, error) {
+func NewConfig(logger *zap.Logger, nodeID string, db *database.DBManager, local bool) (*Config, error) {
 	nodeKey := os.Getenv("NODE_KEY")
 	if nodeKey == "" {
 		return nil, errors.New("missing node key")
 	}
 	key := nodeKey + "_" + nodeID
-	config, err := db.GetConfig(context.Background(), key)
-	if err != nil {
-		return nil, err
-	}
 	nodeURL := os.Getenv(fmt.Sprintf("NODE%v_URL", nodeID))
+	if nodeURL == "" {
+		return nil, fmt.Errorf("missing node %v url", nodeID)
+	}
 	creds := authorization.Credentials{
 		JWT:      os.Getenv(fmt.Sprintf("NODE%v_TOKEN", nodeID)),
 		Username: os.Getenv(fmt.Sprintf("NODE%v_USER", nodeID)),
 		Password: os.Getenv(fmt.Sprintf("NODE%v_PASSWORD", nodeID)),
 	}
-	if config == nil {
-		if nodeURL == "" {
-			return nil, errors.New("missing node url")
-		}
-		err = db.CreateConfig(context.Background(), key, shared.ProxyConfig{Url: nodeURL, Credentials: creds})
+	if !local {
+		config, err := db.GetConfig(context.Background(), key)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		nodeURL = config.Url
-		creds = config.Credentials
+		if config == nil {
+			err = db.CreateConfig(context.Background(), key, shared.ProxyConfig{Url: nodeURL, Credentials: creds})
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			nodeURL = config.Url
+			creds = config.Credentials
+		}
 	}
 	nURL, err := url.Parse(nodeURL)
 	if err != nil {
@@ -76,6 +79,7 @@ func NewConfig(logger *zap.Logger, nodeID string, db *database.DBManager) (*Conf
 		Lock:     &sync.RWMutex{},
 		NodeURL:  nURL,
 		NodeCred: creds,
+		Local:    local,
 	}, nil
 }
 
@@ -138,6 +142,12 @@ func (conf *Config) ProxyConfig(w http.ResponseWriter, r *http.Request) {
 			Url:         conf.NodeURL.String(),
 			Credentials: conf.NodeCred,
 		}); err != nil {
+			conf.Logger.Error("error writing response", zap.Error(err))
+		}
+		return
+	}
+	if conf.Local {
+		if err := util.WriteError(w, -1, fmt.Errorf("only get request allowed on local node")); err != nil {
 			conf.Logger.Error("error writing response", zap.Error(err))
 		}
 		return
