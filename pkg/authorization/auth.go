@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/renproject/multichain-proxy/pkg/util"
 	"go.uber.org/zap"
@@ -26,6 +27,7 @@ type Authorizer struct {
 	Methods          map[string]bool `json:"methods"`
 	Paths            map[string]bool `json:"paths"`
 	ConfigPath       string          `json:"configPath"`
+	LocalNodePath    string          `json:"localPath"`
 	ConfigCredential Credentials     `json:"configCredential"`
 }
 
@@ -46,9 +48,10 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 			Username: os.Getenv("PROXY_USER"),
 			Password: os.Getenv("PROXY_PASSWORD"),
 		},
-		Methods:    util.ConvertEnv2Map("PROXY_METHODS"),
-		Paths:      util.ConvertEnv2Map("PROXY_PATHS"),
-		ConfigPath: os.Getenv("CONFIG_PATH"),
+		Methods:       util.ConvertEnv2Map("PROXY_METHODS"),
+		Paths:         util.ConvertEnv2Map("PROXY_PATHS"),
+		ConfigPath:    os.Getenv("CONFIG_PATH"),
+		LocalNodePath: os.Getenv("LOCAL_NODE_PATH"),
 		ConfigCredential: Credentials{
 			JWT:      os.Getenv("CONFIG_TOKEN"),
 			Username: os.Getenv("CONFIG_USER"),
@@ -58,10 +61,10 @@ func NewAuthorizer(logger *zap.Logger) *Authorizer {
 }
 
 // AuthorizeProxy middleware authorizes all the rpc calls
-func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler) http.Handler {
+func (auth *Authorizer) AuthorizeProxy(next http.Handler, def http.Handler, renProxy http.Handler, renLocalProxy http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth.ConfigPath == r.URL.EscapedPath() {
-			if err := auth.credentialCheck(r, true); err != nil {
+			if err := auth.credentialCheck(r, auth.ConfigCredential); err != nil {
 				auth.Logger.Debug("auth[config-path] check", zap.Error(err))
 				if err = util.WriteError(w, -1, err); err != nil {
 					auth.Logger.Error("error writing response", zap.Error(err))
@@ -69,6 +72,18 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler)
 				return
 			}
 			renProxy.ServeHTTP(w, r)
+			return
+		}
+
+		if auth.LocalNodePath+auth.ConfigPath == r.URL.EscapedPath() {
+			if err := auth.credentialCheck(r, auth.ConfigCredential); err != nil {
+				auth.Logger.Debug("auth[config-path-local] check", zap.Error(err))
+				if err = util.WriteError(w, -1, err); err != nil {
+					auth.Logger.Error("error writing response", zap.Error(err))
+				}
+				return
+			}
+			renLocalProxy.ServeHTTP(w, r)
 			return
 		}
 
@@ -82,7 +97,7 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler)
 		}
 
 		// check if valid proxy credentials
-		if err := auth.credentialCheck(r, false); err != nil {
+		if err := auth.credentialCheck(r, auth.Credentials); err != nil {
 			auth.Logger.Debug("auth check", zap.Error(err))
 			if err = util.WriteError(w, -1, err); err != nil {
 				auth.Logger.Error("error writing response", zap.Error(err))
@@ -100,17 +115,22 @@ func (auth *Authorizer) AuthorizeProxy(next http.Handler, renProxy http.Handler)
 			}
 			return
 		}
-
-		next.ServeHTTP(w, r)
+		if strings.HasPrefix(r.URL.EscapedPath(), auth.LocalNodePath) {
+			r.URL.Path = strings.TrimLeft(r.URL.Path, auth.LocalNodePath)
+			if !strings.HasPrefix(r.URL.Path, "/") {
+				r.URL.Path = "/" + r.URL.Path
+			}
+			auth.Logger.Debug("proxy to local node")
+			def.ServeHTTP(w, r)
+		} else {
+			auth.Logger.Debug("proxy to config node")
+			next.ServeHTTP(w, r)
+		}
 	})
 }
 
 // credentialCheck verifies the proxy credentials if any
-func (auth *Authorizer) credentialCheck(r *http.Request, configCheck bool) error {
-	cred := auth.Credentials
-	if configCheck {
-		cred = auth.ConfigCredential
-	}
+func (auth *Authorizer) credentialCheck(r *http.Request, cred Credentials) error {
 	if cred.JWT != "" {
 		if r.Header.Get("Authorization") != cred.JWT {
 			return errors.New("request not authorized")
