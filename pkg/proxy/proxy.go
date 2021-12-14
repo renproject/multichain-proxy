@@ -84,7 +84,11 @@ func (conf *Config) ProxyDirector(req *http.Request) {
 	req.Host = conf.NodeURL.Host
 	req.URL.Scheme = conf.NodeURL.Scheme
 	req.URL.Host = conf.NodeURL.Host
-	req.URL.Path = strings.TrimRight(conf.NodeURL.Path, "/") + strings.TrimRight(req.URL.Path, "/")
+	tempPath := strings.TrimRight(conf.NodeURL.Path, "/") + strings.TrimRight(req.URL.Path, "/")
+	if strings.HasSuffix(req.URL.Path, "/") {
+		tempPath += "/"
+	}
+	req.URL.Path = tempPath
 
 	conf.Logger.Debug("proxy data after modification", zap.Any("request", req.Host), zap.Any("request-url", req.URL), zap.Any("request-url", req.URL.RawPath), zap.Any("request-url", req.URL.Path), zap.Any("node", conf.NodeURL.Host), zap.Any("node-url", conf.NodeURL))
 
