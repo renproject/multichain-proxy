@@ -80,12 +80,19 @@ func main() {
 	localServer1 := &httputil.ReverseProxy{Director: localConf1.ProxyDirector}
 	localServer2 := &httputil.ReverseProxy{Director: localConf2.ProxyDirector}
 
+	errorChan := make(chan error, 1)
+
 	// setup node 1 proxy to forward request to node 2 in case of error response
 	proxyServer1 := &httputil.ReverseProxy{
 		Director:       conf1.ProxyDirector,
 		ModifyResponse: conf1.ModifyResponse,
 		ErrorHandler: func(writer http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("node1 failed to respond", zap.Error(err))
+
+			// known http2 error, cannot recover once this error is hit. only solution is to restart pod
+			if strings.Contains(err.Error(), "after Request.Body was written; define Request.GetBody to avoid this error") {
+				errorChan <- err
+			}
 
 			// update the request body for node 2 to the original request
 			buf := bytes.NewBuffer(conf1.Body)
@@ -106,6 +113,12 @@ func main() {
 		}).Handler(auth.AuthorizeProxy(proxyServer1, localServer1, localServer2, http.HandlerFunc(conf1.ProxyConfig), http.HandlerFunc(conf2.ProxyConfig), http.HandlerFunc(localConf1.ProxyConfig), http.HandlerFunc(localConf2.ProxyConfig))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
+
+	// http2 error handler, force restart the pod
+	go func() {
+		err := <-errorChan
+		panic(fmt.Errorf("irrecoverable error, restarting pod. error=%w", err))
+	}()
 
 	httpServer.ListenAndServe()
 }
