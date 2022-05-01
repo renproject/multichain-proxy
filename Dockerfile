@@ -1,7 +1,8 @@
-FROM golang:1.16-alpine AS builder
+FROM golang:1.18-alpine AS builder
 # SETUP WORKDIR AWAY FROM $GOTPATH
 RUN mkdir /app
 WORKDIR /app
+RUN apk add git
 
 # COPY SOURCE
 COPY . .
