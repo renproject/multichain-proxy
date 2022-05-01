@@ -89,6 +89,7 @@ func main() {
 		ErrorHandler: func(writer http.ResponseWriter, r *http.Request, err error) {
 			logger.Error("node1 failed to respond", zap.Error(err))
 
+			// FIXME: common issue with http2 in go - issue ref: https://github.com/olivere/elastic/issues/1443, https://github.com/google/go-github/issues/2113 etc.
 			// known http2 error, cannot recover once this error is hit. only solution is to restart pod
 			if strings.Contains(err.Error(), "after Request.Body was written; define Request.GetBody to avoid this error") {
 				errorChan <- err
