@@ -95,9 +95,9 @@ func (conf *Config) ProxyDirector(req *http.Request) {
 	req.URL.Scheme = conf.NodeURL.Scheme
 	req.URL.Host = conf.NodeURL.Host
 	tempPath := strings.TrimRight(conf.NodeURL.Path, "/") + strings.TrimRight(req.URL.Path, "/")
-	if req.URL.Path=="/"{
+	if req.URL.Path == "/" {
 		tempPath = conf.NodeURL.Path
-	}else if strings.HasSuffix(req.URL.Path, "/") {
+	} else if strings.HasSuffix(req.URL.Path, "/") {
 		tempPath += "/"
 	}
 	req.URL.Path = tempPath
