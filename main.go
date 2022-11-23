@@ -73,7 +73,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      20 * time.Second,
-		Handler:           CORSMiddleware(http.Handler(auth.AuthorizeProxy(proxyServer, lcoalServer, http.HandlerFunc(conf.ProxyConfig), http.HandlerFunc(localConf.ProxyConfig)))),
+		Handler:           CORSMiddleware(auth.AuthorizeProxy(proxyServer, lcoalServer, http.HandlerFunc(conf.ProxyConfig), http.HandlerFunc(localConf.ProxyConfig))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
 
