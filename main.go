@@ -78,6 +78,7 @@ func main() {
 			AllowedOrigins:   []string{"*"},
 			AllowCredentials: true,
 			AllowedMethods:   []string{"POST", "GET", "OPTIONS"},
+			AllowedHeaders:   []string{"*"},
 		}).Handler(auth.AuthorizeProxy(proxyServer, lcoalServer, http.HandlerFunc(conf.ProxyConfig), http.HandlerFunc(localConf.ProxyConfig))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
