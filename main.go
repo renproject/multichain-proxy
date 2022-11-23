@@ -13,7 +13,6 @@ import (
 
 	"github.com/renproject/multichain-proxy/pkg/authorization"
 	"github.com/renproject/multichain-proxy/pkg/proxy"
-	"github.com/rs/cors"
 	"go.uber.org/zap"
 )
 
@@ -74,7 +73,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      20 * time.Second,
-		Handler:           cors.AllowAll().Handler(auth.AuthorizeProxy(proxyServer, lcoalServer, http.HandlerFunc(conf.ProxyConfig), http.HandlerFunc(localConf.ProxyConfig))),
+		Handler:           CORSMiddleware(http.Handler(auth.AuthorizeProxy(proxyServer, lcoalServer, http.HandlerFunc(conf.ProxyConfig), http.HandlerFunc(localConf.ProxyConfig)))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
 
