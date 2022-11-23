@@ -77,8 +77,15 @@ func main() {
 		Handler: cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
 			AllowCredentials: true,
-			AllowedMethods:   []string{"POST", "GET", "OPTIONS"},
-			AllowedHeaders:   []string{"*"},
+			AllowedMethods: []string{
+				http.MethodHead,
+				http.MethodGet,
+				http.MethodPost,
+				http.MethodPut,
+				http.MethodPatch,
+				http.MethodDelete,
+			},
+			AllowedHeaders: []string{"*"},
 		}).Handler(auth.AuthorizeProxy(proxyServer, lcoalServer, http.HandlerFunc(conf.ProxyConfig), http.HandlerFunc(localConf.ProxyConfig))),
 	}
 	httpServer.SetKeepAlivesEnabled(false)
