@@ -82,10 +82,13 @@ func main() {
 
 func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Del("Access-Control-Allow-Origin")
+		w.Header().Del("access-control-allow-origin")
 		w.Header().Set("Access-Control-Allow-Origin", "*") // change this later
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Headers", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("I-am-setting-headers", "yes")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(204)
